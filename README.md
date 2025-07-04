@@ -484,3 +484,21 @@ resources:
 ```
 
 You should monitor your application's actual resource consumption in Grafana and adjust these values to match its real-world performance profile.
+
+## 7. ArgoCD Configuration
+
+This project uses ArgoCD for continuous delivery, following GitOps principles. The `argocd/` directory contains the ArgoCD Application manifests for each environment.
+
+*   `argocd/dev-app.yaml`: Deploys the application to the `dev` namespace, tracking the `k8s/overlays/dev` directory.
+*   `argocd/stage-app.yaml`: Deploys the application to the `stage` namespace, tracking the `k8s/overlays/stage` directory.
+*   `argocd/prod-app.yaml`: Deploys the application to the `prod` namespace, tracking the `k8s/overlays/prod` directory.
+
+To use these, apply them to your cluster where ArgoCD is running:
+
+```bash
+kubectl apply -f argocd/dev-app.yaml
+kubectl apply -f argocd/stage-app.yaml
+kubectl apply -f argocd/prod-app.yaml
+```
+
+**Note:** You must replace the `repoURL` placeholder in each file with the actual URL of your Git repository.
