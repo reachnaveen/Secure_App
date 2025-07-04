@@ -151,9 +151,9 @@ This project leverages the GitHub Flow branching strategy, which integrates seam
 
 This integrated approach ensures a robust, automated, and secure development and deployment pipeline, aligning with modern DevOps principles.
 
-## 5. Observability: Tracing, Metrics, and Logging
+## 5. Observability: A Deep Dive for Beginners
 
-To gain deep insights into the application's behavior, performance, and health in a production environment, it's crucial to implement a robust observability strategy. This typically consists of three pillars: distributed tracing, metrics, and centralized logging.
+To gain deep insights into the application's behavior, performance, and health in a production environment, it's crucial to implement a robust observability strategy. This typically consists of three pillars: distributed tracing, metrics, and centralized logging. This section provides a detailed, step-by-step guide for setting up each of these pillars.
 
 ### 5.1. Distributed Tracing with OpenTelemetry
 
@@ -163,12 +163,28 @@ Distributed tracing allows you to follow a single request as it travels through 
 
 The easiest way to enable tracing for a Java application is by using the OpenTelemetry Java agent. This agent can be attached to your application without any code changes and will automatically instrument popular frameworks and libraries (like Spring MVC, JDBC, etc.).
 
-To integrate it into your Kubernetes deployment, you would:
-1.  Download the OpenTelemetry Java agent JAR.
-2.  Add it to your backend's Docker image or make it available via an `initContainer` in Kubernetes.
-3.  Update your Kubernetes `Deployment` manifest to attach the agent using the `JAVA_TOOL_OPTIONS` environment variable.
+Here’s how to integrate it into your project:
 
-Here is an example snippet for your `k8s/base/deployment.yaml` or an environment-specific overlay:
+**Step 1: Download the OpenTelemetry Java Agent**
+
+Instead of manually downloading the agent, we'll modify the `backend/Dockerfile` to download it for us. This ensures that the agent is always available when you build your backend container image.
+
+The `backend/Dockerfile` has been updated to include the following lines:
+
+```dockerfile
+# Use a build argument to specify the OpenTelemetry agent version
+ARG OTEL_AGENT_VERSION=1.32.0
+# Download the OpenTelemetry agent
+ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar /opentelemetry-javaagent.jar
+```
+
+This downloads the specified version of the agent and places it in the root directory of the image.
+
+**Step 2: Attach the Agent to the Application**
+
+Now that the agent is in the container image, we need to tell the Java Virtual Machine (JVM) to use it. We do this by setting the `JAVA_TOOL_OPTIONS` environment variable in our Kubernetes deployment.
+
+The `k8s/base/deployment.yaml` file has been updated to include the following environment variables:
 
 ```yaml
 # In your backend container spec
@@ -178,7 +194,7 @@ spec:
     # ... other container properties
     env:
     - name: JAVA_TOOL_OPTIONS
-      value: "-javaagent:/path/to/opentelemetry-javaagent.jar"
+      value: "-javaagent:/opentelemetry-javaagent.jar"
     - name: OTEL_SERVICE_NAME
       value: "secure-app-backend"
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -485,7 +501,37 @@ resources:
 
 You should monitor your application's actual resource consumption in Grafana and adjust these values to match its real-world performance profile.
 
-## 7. ArgoCD Configuration
+## 7. Authentication and Authorization
+
+This application uses Google for authentication via OAuth2. This section explains how to configure roles to control access to the API.
+
+### 7.1. Roles
+
+There are two roles in this application:
+
+*   **`ROLE_USER`**: A regular user. Any user who successfully logs in is granted this role. Users with this role can access all `GET` endpoints in the API.
+*   **`ROLE_ADMIN`**: An administrator. This role is granted to users who are members of the `admin` group in Google Cloud Identity. Users with this role can access all `GET` and `POST` endpoints in the API.
+
+### 7.2. Creating an Admin User
+
+To create an admin user, you need to configure your Google Cloud project to send group information to the application.
+
+**Step 1: Create a Group in Google Cloud Identity**
+
+1.  Go to the [Google Cloud Identity Groups page](https://console.cloud.google.com/iam-admin/groups).
+2.  Create a new group named `admin`.
+3.  Add your Google account (the one you use to log in) to this group.
+
+**Step 2: Configure your OAuth Consent Screen**
+
+1.  Go to the [OAuth consent screen page](https://console.cloud.google.com/apis/credentials/consent).
+2.  Click **Edit App**.
+3.  Under **Scopes**, add the `.../auth/userinfo.profile` and `.../auth/userinfo.email` scopes if they are not already there.
+4.  Under **Optional claims**, add `groups` to the **ID token**.
+
+Now, when you log in to your application with your Google account, Google will include a `groups` claim in the ID token. The application will see the `admin` group in this claim and grant your user the `ROLE_ADMIN`.
+
+## 8. ArgoCD Configuration
 
 This project uses ArgoCD for continuous delivery, following GitOps principles. The `argocd/` directory contains the ArgoCD Application manifests for each environment.
 

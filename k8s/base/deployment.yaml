@@ -41,6 +41,12 @@ spec:
           timeoutSeconds: 2
           failureThreshold: 3
         env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-javaagent:/opentelemetry-javaagent.jar"
+        - name: OTEL_SERVICE_NAME
+          value: "secure-app-backend"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.observability.svc.cluster.local:4317"
         - name: GOOGLE_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
