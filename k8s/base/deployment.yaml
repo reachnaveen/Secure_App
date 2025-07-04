@@ -17,6 +17,29 @@ spec:
         image: your-docker-repo/secure-app:latest
         ports:
         - containerPort: 8080
+        resources:
+          requests:
+            cpu: "250m" # 0.25 of a CPU core
+            memory: "512Mi" # 512 Mebibytes
+          limits:
+            cpu: "1" # 1 full CPU core
+            memory: "1Gi" # 1 Gibibyte
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
         env:
         - name: GOOGLE_CLIENT_SECRET
           valueFrom:
