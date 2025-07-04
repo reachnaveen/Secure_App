@@ -1,0 +1,163 @@
+# Azure DevOps Pipeline for Secure Full-Stack Application
+
+trigger:
+  - main
+  - develop
+  - feature/*
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # Replace with your Azure Container Registry login server
+  ACR_LOGIN_SERVER: 'your-docker-repo'
+  DOCKER_IMAGE_NAME_BACKEND: 'secure-app-backend'
+  DOCKER_IMAGE_NAME_FRONTEND: 'secure-app-frontend'
+  DOCKER_IMAGE_TAG: '$(Build.BuildId)'
+
+stages:
+- stage: BuildAndTest
+  displayName: 'Build, Test & Scan'
+  jobs:
+  - job: Backend
+    displayName: 'Backend (Java) Build, Test & Scan'
+    steps:
+    - task: JavaToolInstaller@0
+      displayName: 'Install JDK 17'
+      inputs:
+        versionSpec: '17'
+        jdkArchitectureOption: 'x64'
+        jdkSourceOption: 'PreInstalled'
+
+    - task: Maven@4
+      displayName: 'Build Backend & Run Tests'
+      inputs:
+        mavenPomFile: 'backend/pom.xml'
+        goals: 'clean install'
+        options: '-Dspring.security.oauth2.client.registration.google.client-id=$(GOOGLE_CLIENT_ID) -Dspring.security.oauth2.client.registration.google.client-secret=$(GOOGLE_CLIENT_SECRET)'
+        publishJUnitResults: true
+        testResultsFiles: '**/TEST-*.xml'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '1.17'
+        mavenVersionOption: 'Default'
+
+    - task: Maven@4
+      displayName: 'Run Backend SAST (SpotBugs)'
+      inputs:
+        mavenPomFile: 'backend/pom.xml'
+        goals: 'spotbugs:check'
+        publishJUnitResults: false
+
+    - task: Maven@4
+      displayName: 'Run Backend SCA (OWASP Dependency-Check)'
+      inputs:
+        mavenPomFile: 'backend/pom.xml'
+        goals: 'org.owasp:dependency-check-maven:check'
+        publishJUnitResults: false
+
+    - task: Docker@2
+      displayName: 'Build Backend Docker Image'
+      inputs:
+        command: 'build'
+        Dockerfile: 'backend/Dockerfile'
+        tags: '$(DOCKER_IMAGE_TAG)'
+        arguments: '--build-arg GOOGLE_CLIENT_ID=$(GOOGLE_CLIENT_ID)'
+        containerRegistry: '$(ACR_LOGIN_SERVER)'
+        repository: '$(DOCKER_IMAGE_NAME_BACKEND)'
+
+    - task: Docker@2
+      displayName: 'Push Backend Docker Image'
+      inputs:
+        command: 'push'
+        tags: '$(DOCKER_IMAGE_TAG)'
+        containerRegistry: '$(ACR_LOGIN_SERVER)'
+        repository: '$(DOCKER_IMAGE_NAME_BACKEND)'
+
+  - job: Frontend
+    displayName: 'Frontend (React) Build, Test & Scan'
+    steps:
+    - task: NodeTool@0
+      displayName: 'Install Node.js'
+      inputs:
+        versionSpec: '18.x' # Or your preferred LTS version
+
+    - script:
+        npm install
+      displayName: 'Install Frontend Dependencies'
+      workingDirectory: 'frontend'
+
+    - script:
+        npm test -- --watchAll=false
+      displayName: 'Run Frontend Tests'
+      workingDirectory: 'frontend'
+
+    - script:
+        npm audit
+      displayName: 'Run Frontend SCA (npm audit)'
+      workingDirectory: 'frontend'
+
+    - task: Docker@2
+      displayName: 'Build Frontend Docker Image'
+      inputs:
+        command: 'build'
+        Dockerfile: 'frontend/Dockerfile' # Assuming you'll create one for frontend
+        tags: '$(DOCKER_IMAGE_TAG)'
+        containerRegistry: '$(ACR_LOGIN_SERVER)'
+        repository: '$(DOCKER_IMAGE_NAME_FRONTEND)'
+
+    - task: Docker@2
+      displayName: 'Push Frontend Docker Image'
+      inputs:
+        command: 'push'
+        tags: '$(DOCKER_IMAGE_TAG)'
+        containerRegistry: '$(ACR_LOGIN_SERVER)'
+        repository: '$(DOCKER_IMAGE_NAME_FRONTEND)'
+
+- stage: Deploy
+  displayName: 'Deploy to Kubernetes'
+  dependsOn: BuildAndTest
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main')) # Only deploy from main branch
+  jobs:
+  - job: DeployToDev
+    displayName: 'Deploy to Dev Environment'
+    steps:
+    - checkout: self
+      persistCredentials: true # Required for pushing to Git
+
+    - script: |
+        # This is a conceptual step. In a real GitOps setup,
+        # you would update a Kustomize or Helm value file in a separate GitOps repository.
+        # Argo CD or Flux would then detect this change and deploy.
+        # Example: Update image tag in k8s/overlays/dev/kustomization.yaml or a Helm values file
+        echo "Simulating GitOps deployment trigger for Dev..."
+        # Example: Update image tag in a Kustomize patch file
+        # kubectl kustomize k8s/overlays/dev > dev-manifests.yaml
+        # sed -i 's|image: your-docker-repo/secure-app-backend:.*|image: $(ACR_LOGIN_SERVER)/$(DOCKER_IMAGE_NAME_BACKEND):$(DOCKER_IMAGE_TAG)|' dev-manifests.yaml
+        # git config user.email "azure-devops@example.com"
+        # git config user.name "Azure DevOps"
+        # git add dev-manifests.yaml
+        # git commit -m "Update backend image to $(DOCKER_IMAGE_TAG) for dev"
+        # git push origin HEAD:refs/heads/gitops-dev-repo-branch
+
+        echo "Deployment to Dev triggered by GitOps. Image: $(ACR_LOGIN_SERVER)/$(DOCKER_IMAGE_NAME_BACKEND):$(DOCKER_IMAGE_TAG)"
+      displayName: 'Trigger GitOps Deployment for Dev'
+
+  - job: DeployToStage
+    displayName: 'Deploy to Stage Environment'
+    dependsOn: DeployToDev
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main')) # Only deploy from main branch
+    steps:
+    - script: |
+        echo "Simulating GitOps deployment trigger for Stage..."
+        echo "Deployment to Stage triggered by GitOps. Image: $(ACR_LOGIN_SERVER)/$(DOCKER_IMAGE_NAME_BACKEND):$(DOCKER_IMAGE_TAG)"
+      displayName: 'Trigger GitOps Deployment for Stage'
+
+  - job: DeployToProd
+    displayName: 'Deploy to Prod Environment'
+    dependsOn: DeployToStage
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main')) # Only deploy from main branch
+    steps:
+    - script: |
+        echo "Simulating GitOps deployment trigger for Prod..."
+        echo "Deployment to Prod triggered by GitOps. Image: $(ACR_LOGIN_SERVER)/$(DOCKER_IMAGE_NAME_BACKEND):$(DOCKER_IMAGE_TAG)"
+      displayName: 'Trigger GitOps Deployment for Prod'

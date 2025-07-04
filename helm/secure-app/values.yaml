@@ -1,0 +1,10 @@
+replicaCount: 1
+
+image:
+  repository: your-docker-repo/secure-app
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 80

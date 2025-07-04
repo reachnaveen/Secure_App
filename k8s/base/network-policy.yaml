@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: secure-app-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: secure-app
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app: frontend-app # Assuming your frontend pod has this label
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0 # Allow egress to all IPs (e.g., for external services like OAuth provider)

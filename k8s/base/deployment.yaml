@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secure-app
+  template:
+    metadata:
+      labels:
+        app: secure-app
+    spec:
+      containers:
+      - name: secure-app
+        image: your-docker-repo/secure-app:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: secure-app-secrets
+              key: google-client-secret
+        securityContext:
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
